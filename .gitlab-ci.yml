@@ -1,0 +1,65 @@
+stages:
+  - build
+  - analyze
+
+include:
+  project: $CI_TEMPLATES_PROJECT
+  file:
+    - maven/checkPom.yaml
+
+checkPomXml:
+  extends:
+    - .checkPomXml
+  stage: build
+
+build:
+  stage: build
+  image: maven:3.9-eclipse-temurin-21
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  cache:
+    key: maven-$CI_COMMIT_REF_SLUG
+    paths:
+      - server/.m2/
+      - extension/node/
+      - extension/node_modules/
+  script:
+    # Выполняем тесты и сборку, генерируем отчёты JaCoCo и coverage.lcov
+    - mvn verify
+  artifacts:
+    paths:
+      - server/target/site/jacoco/
+      - extension/coverage/
+    reports:
+      junit: server/target/surefire-reports/TEST-*.xml
+
+sonar:
+  stage: analyze
+  image: maven:3.9-eclipse-temurin-21
+  needs: [build]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  cache:
+    key: maven-$CI_COMMIT_REF_SLUG
+    paths:
+      - server/.m2/
+      - extension/node/
+      - extension/node_modules/
+  script:
+    # Запускаем SonarQube, используя отчёты из артефактов
+    - mvn
+      org.apache.maven.plugins:maven-checkstyle-plugin:checkstyle
+      org.apache.maven.plugins:maven-pmd-plugin:pmd
+      com.github.spotbugs:spotbugs-maven-plugin:spotbugs
+      sonar:sonar
+      -Dcheckstyle.config.location=google_checks.xml
+      -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml
+      -Dsonar.java.pmd.reportPaths=target/pmd.xml
+      -Dsonar.java.spotbugs.reportPaths=target/spotbugsXml.xml
+      -Dsonar.token=$SONAR_TOKEN
+      -Dsonar.projectKey=povolzhye_termipus
+      -Dsonar.java.coveragePlugin=jacoco
+      -Dsonar.jacoco.reportPaths=server/target/jacoco.exec
+      -Dsonar.coverage.jacoco.xmlReportPaths=server/target/site/jacoco/jacoco.xml
