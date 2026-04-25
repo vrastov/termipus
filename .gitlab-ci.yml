@@ -48,8 +48,9 @@ sonar:
       - extension/node/
       - extension/node_modules/
   script:
-    # Запускаем SonarQube, используя отчёты из артефактов
+    # Компилируем и запускаем статический анализ в одной команде
     - mvn
+      compile test-compile
       org.apache.maven.plugins:maven-checkstyle-plugin:checkstyle
       org.apache.maven.plugins:maven-pmd-plugin:pmd
       com.github.spotbugs:spotbugs-maven-plugin:spotbugs
