@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Termipus",
+  "version": "0.1.0",
+  "description": "Termipus — terminal panel for GitLab and GitHub",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://gitlab.com/*",
+    "https://github.com/*"
+  ],
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://gitlab.com/*", "https://github.com/*"],
+      "js": ["content/index.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icons/icon16.png",
+      "48": "assets/icons/icon48.png",
+      "128": "assets/icons/icon128.png"
+    }
+  }
+}
