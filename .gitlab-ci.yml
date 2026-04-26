@@ -33,6 +33,7 @@ build:
       - extension/coverage/
     reports:
       junit: server/target/surefire-reports/TEST-*.xml
+    expire_in: 14 days
 
 sonar:
   stage: analyze
