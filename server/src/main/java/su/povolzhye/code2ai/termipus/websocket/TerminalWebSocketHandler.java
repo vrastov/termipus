@@ -55,6 +55,16 @@ public final class TerminalWebSocketHandler extends TextWebSocketHandler {
     this.sessionManager = manager;
   }
 
+  /**
+   * Вызывается после установки WebSocket соединения.
+   *
+   * @param ws новая WebSocket сессия
+   */
+  @Override
+  public void afterConnectionEstablished(final WebSocketSession ws) {
+    LOGGER.debug("WebSocket connection established: {}", ws.getId());
+  }
+
   @Override
   protected void handleTextMessage(
       final WebSocketSession ws, final TextMessage message) throws IOException {
@@ -81,9 +91,30 @@ public final class TerminalWebSocketHandler extends TextWebSocketHandler {
   @Override
   public void afterConnectionClosed(
       final WebSocketSession ws, final CloseStatus status) {
+    LOGGER.debug("WebSocket connection closed: {}, status: {}", ws.getId(), status);
     String sessionId = wsToTerminal.remove(ws.getId());
     if (sessionId != null) {
       sessionManager.closeSession(sessionId);
+    }
+  }
+
+  /**
+   * Вызывается при транспортной ошибке WebSocket соединения.
+   *
+   * @param ws затронутая WebSocket сессия
+   * @param exception транспортная ошибка
+   * @throws Exception если закрытие сессии завершилось с ошибкой
+   */
+  @Override
+  public void handleTransportError(
+      final WebSocketSession ws, final Throwable exception) throws Exception {
+    LOGGER.error("Transport error for session {}", ws.getId(), exception);
+    String sessionId = wsToTerminal.remove(ws.getId());
+    if (sessionId != null) {
+      sessionManager.closeSession(sessionId);
+    }
+    if (ws.isOpen()) {
+      ws.close(CloseStatus.SERVER_ERROR);
     }
   }
 
