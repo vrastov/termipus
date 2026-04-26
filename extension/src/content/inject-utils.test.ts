@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-import { createButton, setupSpaNavigation, makeInjectButton, makeRemoveButton, injectWithSpa, resetSpaState } from './inject-utils';
+import { createButton, cloneButtonStyle, setupSpaNavigation, makeInjectButton, makeRemoveButton, injectWithSpa, resetSpaState } from './inject-utils';
 
 describe('inject-utils — createButton', () => {
   it('creates button with correct id, text and class', () => {
@@ -50,6 +50,41 @@ describe('inject-utils — setupSpaNavigation', () => {
   });
 });
 
+describe('inject-utils — cloneButtonStyle', () => {
+  it('does nothing when source is null', () => {
+    const target = document.createElement('button');
+    target.className = 'original';
+    cloneButtonStyle(null, target);
+    expect(target.className).toBe('original');
+  });
+
+  it('copies className from source', () => {
+    const source = document.createElement('button');
+    source.className = 'gl-button btn btn-md btn-default';
+    const target = document.createElement('button');
+    cloneButtonStyle(source, target);
+    expect(target.className).toBe('gl-button btn btn-md btn-default');
+  });
+
+  it('copies data-* attributes from source', () => {
+    const source = document.createElement('button');
+    source.setAttribute('data-size', 'medium');
+    source.setAttribute('data-variant', 'default');
+    const target = document.createElement('button');
+    cloneButtonStyle(source, target);
+    expect(target.getAttribute('data-size')).toBe('medium');
+    expect(target.getAttribute('data-variant')).toBe('default');
+  });
+
+  it('does not copy non-data-* attributes', () => {
+    const source = document.createElement('button');
+    source.setAttribute('aria-label', 'some label');
+    const target = document.createElement('button');
+    cloneButtonStyle(source, target);
+    expect(target.getAttribute('aria-label')).toBeNull();
+  });
+});
+
 describe('inject-utils — makeInjectButton', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -76,6 +111,27 @@ describe('inject-utils — makeInjectButton', () => {
     inject();
     inject();
     expect(document.querySelectorAll('#btn-id').length).toBe(1);
+  });
+
+  it('clones style from first toolbar button when present', () => {
+    document.body.innerHTML = `
+      <div class="toolbar">
+        <button class="gl-button btn-md" data-size="medium" data-variant="default">Existing</button>
+      </div>`;
+    const inject = makeInjectButton('btn-id', '.toolbar', 'fallback-cls');
+    inject();
+    const btn = document.getElementById('btn-id') as HTMLButtonElement;
+    expect(btn.className).toBe('gl-button btn-md');
+    expect(btn.getAttribute('data-size')).toBe('medium');
+    expect(btn.getAttribute('data-variant')).toBe('default');
+  });
+
+  it('falls back to className when toolbar has no buttons', () => {
+    document.body.innerHTML = '<div class="toolbar"></div>';
+    const inject = makeInjectButton('btn-id', '.toolbar', 'fallback-cls');
+    inject();
+    const btn = document.getElementById('btn-id') as HTMLButtonElement;
+    expect(btn.className).toBe('fallback-cls');
   });
 });
 

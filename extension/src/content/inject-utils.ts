@@ -39,6 +39,22 @@ export function createButton(id: string, className: string): HTMLButtonElement {
   return btn;
 }
 
+/**
+ * Copies className and data-* attributes from {@code source} to {@code target}.
+ * No-op if {@code source} is null.
+ */
+export function cloneButtonStyle(source: Element | null, target: HTMLElement): void {
+  if (!source) {
+    return;
+  }
+  target.className = source.className;
+  for (const attr of Array.from(source.attributes)) {
+    if (attr.name.startsWith('data-')) {
+      target.setAttribute(attr.name, attr.value);
+    }
+  }
+}
+
 export function makeInjectButton(buttonId: string, toolbarSelector: string, className: string): () => void {
   return (): void => {
     if (document.getElementById(buttonId)) {
@@ -48,7 +64,9 @@ export function makeInjectButton(buttonId: string, toolbarSelector: string, clas
     if (!toolbar) {
       return;
     }
-    toolbar.appendChild(createButton(buttonId, className));
+    const btn = createButton(buttonId, className);
+    cloneButtonStyle(toolbar.querySelector('button'), btn);
+    toolbar.appendChild(btn);
   };
 }
 
