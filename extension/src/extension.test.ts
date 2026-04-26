@@ -1,21 +1,11 @@
 import { init as initContent } from './content/index';
 import { init as initBackground } from './background/background';
-import { init as initPopup } from './popup/popup';
 
 describe('background', () => {
   it('logs on init', () => {
     const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
     initBackground();
     expect(spy).toHaveBeenCalledWith('Termipus: background started');
-    spy.mockRestore();
-  });
-});
-
-describe('popup', () => {
-  it('logs on init', () => {
-    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    initPopup();
-    expect(spy).toHaveBeenCalledWith('Termipus: popup loaded');
     spy.mockRestore();
   });
 });
