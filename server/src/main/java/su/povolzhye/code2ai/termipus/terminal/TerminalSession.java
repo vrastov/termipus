@@ -1,63 +1,58 @@
 package su.povolzhye.code2ai.termipus.terminal;
 
-import com.pty4j.PtyProcess;
-import com.pty4j.WinSize;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-/** Represents a single PTY terminal session backed by a {@link PtyProcess}. */
-public class TerminalSession {
-
-  private final String id;
-
-  // PtyProcess is an external lifecycle object and cannot be defensively copied.
-  @SuppressFBWarnings("EI_EXPOSE_REP2")
-  private final PtyProcess process;
+/**
+ * Представляет PTY сессию для управления терминальным процессом.
+ */
+public interface TerminalSession {
 
   /**
-   * Creates a new terminal session.
+   * Возвращает входной поток для чтения вывода процесса.
    *
-   * @param id unique session identifier
-   * @param process the underlying PTY process
+   * @return InputStream stdout процесса
    */
-  public TerminalSession(String id, PtyProcess process) {
-    this.id = id;
-    this.process = process;
-  }
-
-  /** Returns the unique session identifier. */
-  public String getId() {
-    return id;
-  }
-
-  /** Returns the input stream of the PTY process (terminal output). */
-  public InputStream getInputStream() {
-    return process.getInputStream();
-  }
-
-  /** Returns the output stream of the PTY process (terminal input). */
-  public OutputStream getOutputStream() {
-    return process.getOutputStream();
-  }
-
-  /** Returns {@code true} if the PTY process is still running. */
-  public boolean isAlive() {
-    return process.isAlive();
-  }
+  InputStream getInputStream();
 
   /**
-   * Resizes the terminal window.
+   * Возвращает выходной поток для записи команд в процесс.
    *
-   * @param cols number of columns
-   * @param rows number of rows
+   * @return OutputStream stdin процесса
    */
-  public void resize(int cols, int rows) {
-    process.setWinSize(new WinSize(cols, rows));
-  }
+  OutputStream getOutputStream();
 
-  /** Destroys the PTY process. */
-  public void close() {
-    process.destroy();
-  }
+  /**
+   * Возвращает поток ошибок процесса.
+   *
+   * @return InputStream stderr процесса
+   */
+  InputStream getErrorStream();
+
+  /**
+   * Изменяет размер псевдо-терминала.
+   *
+   * @param cols количество колонок
+   * @param rows количество строк
+   */
+  void resize(int cols, int rows);
+
+  /**
+   * Закрывает сессию: завершает процесс и освобождает ресурсы.
+   */
+  void close();
+
+  /**
+   * Проверяет, жив ли процесс внутри сессии.
+   *
+   * @return true если процесс запущен и не завершен
+   */
+  boolean isAlive();
+
+  /**
+   * Возвращает PID процесса (если доступен).
+   *
+   * @return PID или -1 если не удалось получить
+   */
+  long getPid();
 }

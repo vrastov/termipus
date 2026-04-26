@@ -1,67 +1,69 @@
 package su.povolzhye.code2ai.termipus.terminal;
 
-import com.pty4j.PtyProcess;
-import com.pty4j.PtyProcessBuilder;
-import java.io.IOException;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.stereotype.Service;
 
-/** Manages active {@link TerminalSession} instances. */
-@Service
-public class TerminalSessionManager {
-
-  private final Map<String, TerminalSession> sessions = new ConcurrentHashMap<>();
+/**
+ * Управляет жизненным циклом PTY сессий.
+ */
+public interface TerminalSessionManager {
 
   /**
-   * Creates a new PTY session with the given terminal dimensions.
+   * Создает новую терминальную сессию и сохраняет её в менеджере.
    *
-   * @param cols number of columns
-   * @param rows number of rows
-   * @return the created session
-   * @throws IOException if the PTY process cannot be started
+   * @param command команда и аргументы для запуска
+   * @param directory рабочая директория (может быть null)
+   * @param environment переменные окружения (может быть null)
+   * @param cols количество колонок
+   * @param rows количество строк
+   * @return идентификатор созданной сессии
+   * @throws SessionCreationException если не удалось создать сессию
    */
-  public TerminalSession create(int cols, int rows) throws IOException {
-    PtyProcess process = new PtyProcessBuilder()
-        .setCommand(resolveShell())
-        .setEnvironment(System.getenv())
-        .setInitialColumns(cols)
-        .setInitialRows(rows)
-        .start();
-
-    String id = UUID.randomUUID().toString();
-    TerminalSession session = new TerminalSession(id, process);
-    sessions.put(id, session);
-    return session;
-  }
+  String createSession(String[] command, String directory,
+                       Map<String, String> environment, int cols, int rows)
+          throws SessionCreationException;
 
   /**
-   * Returns the session with the given id, or {@code null} if not found.
+   * Возвращает сессию по идентификатору.
    *
-   * @param id session identifier
-   * @return the session, or {@code null}
+   * @param sessionId идентификатор сессии
+   * @return TerminalSession или null, если сессия не найдена
    */
-  public TerminalSession get(String id) {
-    return sessions.get(id);
-  }
+  TerminalSession getSession(String sessionId);
 
   /**
-   * Closes and removes the session with the given id.
+   * Закрывает и удаляет сессию из менеджера.
    *
-   * @param id session identifier
+   * @param sessionId идентификатор сессии
    */
-  public void close(String id) {
-    TerminalSession session = sessions.remove(id);
-    if (session != null) {
-      session.close();
-    }
-  }
+  void closeSession(String sessionId);
 
-  private String[] resolveShell() {
-    if (System.getProperty("os.name").toLowerCase().contains("win")) {
-      return new String[]{"cmd.exe"};
-    }
-    return new String[]{System.getenv().getOrDefault("SHELL", "/bin/bash")};
-  }
+  /**
+   * Изменяет размер терминала для указанной сессии.
+   *
+   * @param sessionId идентификатор сессии
+   * @param cols новое количество колонок
+   * @param rows новое количество строк
+   * @throws IllegalArgumentException если сессия не найдена
+   */
+  void resizeSession(String sessionId, int cols, int rows);
+
+  /**
+   * Проверяет, существует ли сессия с данным идентификатором.
+   *
+   * @param sessionId идентификатор
+   * @return true если сессия существует
+   */
+  boolean hasSession(String sessionId);
+
+  /**
+   * Возвращает все активные сессии (копию карты идентификатор->сессия).
+   *
+   * @return неизменяемая копия карты сессий
+   */
+  Map<String, TerminalSession> getActiveSessions();
+
+  /**
+   * Закрывает все активные сессии и очищает менеджер.
+   */
+  void closeAllSessions();
 }
