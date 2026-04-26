@@ -35,6 +35,28 @@ build:
       junit: server/target/surefire-reports/TEST-*.xml
     expire_in: 14 days
 
+build:extension:
+  stage: build
+  image: node:24-alpine
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  cache:
+    key: node-$CI_COMMIT_REF_SLUG
+    paths:
+      - extension/node_modules/
+  before_script:
+    - apk add --no-cache zip
+  script:
+    - cd extension
+    - npm ci
+    - npm run build
+    - cd dist && zip -r ../termipus-chrome.zip .
+  artifacts:
+    paths:
+      - extension/termipus-chrome.zip
+    expire_in: 14 days
+
 sonar:
   stage: analyze
   image: maven:3.9-eclipse-temurin-21
