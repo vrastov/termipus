@@ -38,10 +38,20 @@
 - Строгий режим (`strict: true`), без `any`
 - Тесты рядом с файлом: `socket.ts` → `socket.test.ts`
 
+## Как внести вклад
+
+Основная платформа — **GitLab**: https://gitlab.com/povolzhye/code2ai/termipus
+
+Если удобнее GitHub: форкни https://github.com/vrastov/termipus и создай PR туда.
+GitHub — публичное зеркало, PR оттуда принимаются и переносятся в GitLab.
+
 ## CI
 
-Pipeline запускается автоматически на каждый push и MR:
+**GitLab CI** запускается на каждый push и MR:
 - `build` — сборка и тесты обоих модулей
 - `sonar` — анализ кода (только `main` и MR)
 
 Quality Gate блокирует merge при покрытии < 80% или критических замечаниях.
+
+**GitHub Actions** запускается на push в `main` и PR:
+- `build` — `mvn verify` (сборка и тесты Java-модуля)
