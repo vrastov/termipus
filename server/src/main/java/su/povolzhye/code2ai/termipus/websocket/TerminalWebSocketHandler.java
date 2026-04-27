@@ -142,10 +142,10 @@ public final class TerminalWebSocketHandler extends TextWebSocketHandler {
     if (session == null) {
       return;
     }
+    // xterm.js sends each keystroke individually; PTY is in canonical mode,
+    // so \r must come only from the user pressing Enter (already encoded as \r by xterm).
+    // Previously appending \r to every input caused single keystrokes to execute immediately.
     String input = payload.replace("\n", "\r");
-    if (!input.endsWith("\r")) {
-      input += "\r";
-    }
     session.getOutputStream().write(input.getBytes(StandardCharsets.UTF_8));
     session.getOutputStream().flush();
   }

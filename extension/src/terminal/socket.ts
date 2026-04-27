@@ -1,6 +1,7 @@
 /**
  * WebSocket client for terminal communication.
- * Handles connection, reconnection, resizing, and message passing.
+ * Delegates WebSocket connection to background service worker via chrome.runtime.connect
+ * to bypass page CSP restrictions on GitLab/GitHub.
  */
 
 export type TerminalSocketCallbacks = {
@@ -11,8 +12,7 @@ export type TerminalSocketCallbacks = {
 };
 
 export class TerminalSocket {
-  private ws: WebSocket | null = null;
-  private url: string = '';
+  private port: chrome.runtime.Port | null = null;
   private reconnectTimer: number | null = null;
   private manuallyClosed: boolean = false;
   private cols: number;
@@ -24,38 +24,31 @@ export class TerminalSocket {
     this.rows = rows;
   }
 
-  /**
-   * Set callbacks for socket events.
-   */
+  /** Set callbacks for socket events. */
   public setCallbacks(callbacks: TerminalSocketCallbacks): void {
     this.callbacks = { ...this.callbacks, ...callbacks };
   }
 
-  /**
-   * Connect to the WebSocket server using URL from chrome.storage.
-   * If already connected or connecting, does nothing.
-   */
+  /** Connect to the WebSocket server via background service worker. */
   public async connect(): Promise<void> {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      return;
-    }
-    if (this.ws?.readyState === WebSocket.CONNECTING) {
+    if (this.port) {
       return;
     }
     this.manuallyClosed = false;
     try {
-      this.url = await this.loadUrl();
-      this.establishConnection();
+      const url = await this.loadUrl();
+      this.establishConnection(url);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('Extension context invalidated')) {
+        return;
+      }
       console.error('Failed to load WebSocket URL:', error);
       this.scheduleReconnect();
     }
   }
 
-  /**
-   * Load server URL from chrome.storage.sync.
-   * Default: 'ws://localhost:8080/terminal'
-   */
+  /** Load server URL from chrome.storage.sync. */
   private loadUrl(): Promise<string> {
     return new Promise((resolve, reject) => {
       if (typeof chrome !== 'undefined' && chrome.storage?.sync) {
@@ -63,141 +56,87 @@ export class TerminalSocket {
           if (chrome.runtime?.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
           } else {
-            const url = result.serverUrl || 'ws://localhost:8080/terminal';
-            resolve(url);
+            resolve((result.serverUrl as string | undefined) || 'ws://localhost:8080/terminal');
           }
         });
       } else {
-        // Fallback for non-extension environment (tests)
         resolve('ws://localhost:8080/terminal');
       }
     });
   }
 
-  /**
-   * Create WebSocket connection and set up event handlers.
-   */
-  private establishConnection(): void {
+  private establishConnection(url: string): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    this.ws = new WebSocket(this.url);
-    this.ws.onopen = this.handleOpen.bind(this);
-    this.ws.onmessage = this.handleMessage.bind(this);
-    this.ws.onclose = this.handleClose.bind(this);
-    this.ws.onerror = this.handleError.bind(this);
+    this.port = chrome.runtime.connect({ name: 'terminal' });
+
+    this.port.onMessage.addListener((msg: { type: string; data?: string }) => {
+      if (msg.type === 'open') {
+        this.port?.postMessage({
+          type: 'send',
+          data: JSON.stringify({ type: 'init', cols: this.cols, rows: this.rows }),
+        });
+        this.callbacks.onOpen?.();
+      } else if (msg.type === 'data') {
+        if (msg.data) {
+          this.callbacks.onData?.(msg.data);
+        }
+      } else if (msg.type === 'error') {
+        this.callbacks.onError?.(new Event('error'));
+      } else if (msg.type === 'close') {
+        this.port = null;
+        this.callbacks.onClose?.();
+        if (!this.manuallyClosed) {
+          this.scheduleReconnect();
+        }
+      }
+    });
+
+    this.port.onDisconnect.addListener(() => {
+      this.port = null;
+      if (!this.manuallyClosed) {
+        this.scheduleReconnect();
+      }
+    });
+
+    this.port.postMessage({ type: 'connect', url });
   }
 
-  /**
-   * Handle WebSocket open event.
-   * Sends init message with current terminal dimensions.
-   */
-  private handleOpen(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      const initMessage = JSON.stringify({
-        type: 'init',
-        cols: this.cols,
-        rows: this.rows,
-      });
-      this.ws.send(initMessage);
-      this.callbacks.onOpen?.();
-    }
-  }
-
-  /**
-   * Handle incoming WebSocket messages.
-   */
-  private handleMessage(event: MessageEvent): void {
-    const data = typeof event.data === 'string' ? event.data : '';
-    if (data) {
-      this.callbacks.onData?.(data);
-    }
-  }
-
-  /**
-   * Handle WebSocket close event.
-   * Schedules reconnect unless manually closed.
-   */
-  private handleClose(): void {
-    this.ws = null;
-    this.callbacks.onClose?.();
-    if (!this.manuallyClosed) {
-      this.scheduleReconnect();
-    }
-  }
-
-  /**
-   * Handle WebSocket error event.
-   */
-  private handleError(event: Event): void {
-    this.callbacks.onError?.(event);
-    // No immediate reconnect; close will follow
-  }
-
-  /**
-   * Schedule a reconnection attempt after 3 seconds.
-   */
-  private scheduleReconnect(): void {
-    if (this.manuallyClosed) {
-      return;
-    }
-    if (this.reconnectTimer) {
-      return;
-    }
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect();
-    }, 3000);
-  }
-
-  /**
-   * Send data through the WebSocket.
-   * If connection is not open, data is silently dropped (no buffering).
-   */
+  /** Send data through the WebSocket. */
   public send(data: string): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(data);
-    }
+    this.port?.postMessage({ type: 'send', data });
   }
 
-  /**
-   * Resize terminal and notify server.
-   * Stores new dimensions for future reconnections.
-   */
+  /** Resize terminal and notify server. */
   public resize(cols: number, rows: number): void {
     this.cols = cols;
     this.rows = rows;
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      const resizeMessage = JSON.stringify({
-        type: 'resize',
-        cols: this.cols,
-        rows: this.rows,
-      });
-      this.ws.send(resizeMessage);
-    }
+    this.port?.postMessage({ type: 'resize', cols, rows });
   }
 
-  /**
-   * Manually disconnect and prevent automatic reconnection.
-   */
+  /** Manually disconnect and prevent automatic reconnection. */
   public disconnect(): void {
     this.manuallyClosed = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    if (this.ws) {
-      // Remove event handlers to avoid further callbacks
-      this.ws.onopen = null;
-      this.ws.onmessage = null;
-      this.ws.onclose = null;
-      this.ws.onerror = null;
-      if (this.ws.readyState === WebSocket.OPEN ||
-          this.ws.readyState === WebSocket.CONNECTING) {
-        this.ws.close();
-      }
-      this.ws = null;
+    if (this.port) {
+      this.port.postMessage({ type: 'disconnect' });
+      this.port.disconnect();
+      this.port = null;
     }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.manuallyClosed || this.reconnectTimer) {
+      return;
+    }
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.connect();
+    }, 3000);
   }
 }
